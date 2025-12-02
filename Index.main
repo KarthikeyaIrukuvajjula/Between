@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Between Game — Local Web Prototype</title>
+<style>
+  :root{--bg:#0f1724;--card:#ffffff;--accent:#f59e0b;--muted:#94a3b8}
+  body{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:0;background:linear-gradient(180deg,#071226 0%, #071e2e 100%);color:#e6eef6}
+  .wrap{max-width:980px;margin:24px auto;padding:18px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 6px 30px rgba(2,6,23,0.6)}
+  h1{margin:0 0 12px;font-size:20px}
+  .top{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .panel{background:rgba(255,255,255,0.02);padding:10px;border-radius:10px;min-width:160px}
+  .row{display:flex;gap:12px;align-items:center}
+  .board{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .table{padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02))}
+  .deck{width:56px;height:80px;border-radius:6px;background:linear-gradient(180deg,#07263d,#083447);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+  .card{width:86px;height:120px;border-radius:8px;background:#fff;color:#111;display:flex;flex-direction:column;justify-content:space-between;padding:8px;font-weight:700;box-shadow:0 4px 14px rgba(2,6,23,0.5)}
+  .card.red{color:#c026d3}
+  .seat{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  .seat .info{min-width:160px}
+  .btn{background:var(--accent);color:#071226;padding:8px 10px;border-radius:8px;border:none;font-weight:700;cursor:pointer}
+  .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+  .actions{display:flex;gap:8px}
+  input[type=range]{width:120px}
+  .log{height:140px;overflow:auto;background:rgba(0,0,0,0.25);padding:8px;border-radius:8px;font-size:13px}
+  .small{font-size:12px;color:var(--muted)}
+  footer{margin-top:12px;font-size:12px;color:var(--muted)}
+  .flex{display:flex;gap:8px;align-items:center}
+  .center{display:flex;justify-content:center}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>“Between” — Local Web Prototype (no backend)</h1>
+    <div class="top">
+      <div class="panel">
+        <div class="row"><strong>Game ID:</strong><span id="gameId" class="small" style="margin-left:8px"></span></div>
+        <div class="row"><strong>Players:</strong><span id="playerCount" style="margin-left:8px">0</span></div>
+        <div class="row"><strong>Entry fee:</strong><span id="entryFee" style="margin-left:8px">₹20</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="row"><strong>Pot:</strong><span id="pot" style="margin-left:8px">0</span></div>
+        <div class="row"><strong>Deck left:</strong><span id="deckLeft" style="margin-left:8px">52</span></div>
+        <div class="row"><strong>Pointer:</strong><span id="pointer" style="margin-left:8px">0</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="row"><strong>Local wallet:</strong><span id="wallet" style="margin-left:8px">₹500</span></div>
+        <div class="row small">This prototype uses localStorage for state. Refresh will keep the game.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px" class="row">
+      <button class="btn" id="newGameBtn">New Game</button>
+      <button class="btn secondary" id="resetStorageBtn">Reset Storage</button>
+      <div style="margin-left:auto" class="small">Pass-and-play on one device. To play across devices you'd need a minimal backend (I can provide).</div>
+    </div>
+
+    <div class="board">
+      <div class="table">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;gap:12px;align-items:center">
+            <div class="deck" id="deckView">🂠</div>
+            <div>
+              <div class="small">Top card (next draw):</div>
+              <div id="nextCard" class="small">hidden until draw</div>
+            </div>
+          </div>
+          <div class="flex">
+            <label class="small">Players</label>
+            <input id="playersInput" type="number" value="2" min="2" max="6" style="width:60px;margin-left:6px" />
+            <label class="small" style="margin-left:8px">Entry ₹</label>
+            <input id="entryInput" type="number" value="20" min="1" style="width:80px;margin-left:6px" />
+            <button class="btn" id="createBtn">Create Table</button>
+          </div>
+        </div>
+
+        <hr style="margin:10px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+        <div id="playersArea"></div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn" id="dealBtn">Deal 2 each</button>
+          <button class="btn secondary" id="nextTurnBtn">Next Turn</button>
+          <button class="btn secondary" id="revealBtn">Showdown</button>
+          <div style="margin-left:auto" class="small">Note: in-between uses a draw per bet (independent draws)</div>
+        </div>
+      </div>
+
+      <div class="table">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>Action / Side Bet</strong>
+          <div class="small">Current turn: <span id="currentTurn">-</span></div>
+        </div>
+
+        <div style="margin-top:10px">
+          <div class="row">
+            <label class="small">Active player:</label>
+            <select id="activePlayerSelect"></select>
+          </div>
+
+          <div style="margin-top:10px" class="row">
+            <button class="btn" id="foldBtn">Fold</button>
+            <button class="btn" id="callBtn">Call (match)</button>
+            <button class="btn" id="raiseBtn">Raise</button>
+            <input id="raiseAmount" type="number" value="20" style="width:90px;margin-left:6px" />
+          </div>
+
+          <hr style="margin:10px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+
+          <div><strong>In-Between side bet</strong></div>
+          <div class="row" style="margin-top:8px;align-items:center">
+            <label class="small">Stake ₹</label>
+            <input id="sideStake" type="number" value="10" style="width:100px;margin-left:8px" />
+            <button class="btn" id="placeBetween">Place In-Between</button>
+            <div style="margin-left:auto" class="small">Payout shown before you confirm</div>
+          </div>
+
+          <div style="margin-top:8px" id="betweenInfo" class="small"></div>
+
+          <hr style="margin:10px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+
+          <div><strong>Game log</strong></div>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>How to get a live link: push this file to a GitHub repo and enable GitHub Pages, or deploy to Vercel/Netlify — instructions below.</div>
+    </footer>
+  </div>
+
+<script>
+/* -----------------------
+   Minimal local-only Between Game
+   - pass-and-play (single device)
+   - deck persisted in localStorage
+   - in-between side bet uses actual deck state
+   ----------------------- */
+(function(){
+  // helpers
+  const STORE_PREFIX = 'between:';
+  const CARD_RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const SUITS = ['S','H','D','C'];
+  const createDeck = ()=> {
+    const d = [];
+    for(const r of CARD_RANKS) for(const s of SUITS) d.push(r+s);
+    return d;
+  };
+  function rankValue(card){
+    // card example: "AS" or "10H"
+    const r = card.slice(0, card.length-1);
+    if(r==='J') return 11;
+    if(r==='Q') return 12;
+    if(r==='K') return 13;
+    if(r==='A') return 14;
+    return Number(r);
+  }
+  function cardHTML(card){
+    const r = card.slice(0, card.length-1);
+    const s = card.slice(-1);
+    const red = (s==='H'||s==='D') ? ' red' : '';
+    return `<div class="card${red}"><div>${r}</div><div style="align-self:flex-end">${s}</div></div>`;
+  }
+
+  // secure shuffle using crypto.getRandomValues if available
+  function secureShuffle(deck){
+    const arr = deck.slice();
+    const n = arr.length;
+    for(let i=n-1;i>0;i--){
+      let j;
+      if(window.crypto && crypto.getRandomValues){
+        const rand = crypto.getRandomValues(new Uint32Array(1))[0];
+        j = rand % (i+1);
+      } else {
+        j = Math.floor(Math.random()*(i+1));
+      }
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  // local store
+  function save(key, val){ localStorage.setItem(STORE_PREFIX+key, JSON.stringify(val)); }
+  function load(key, fallback=null){ const v = localStorage.getItem(STORE_PREFIX+key); return v ? JSON.parse(v) : fallback; }
+  function clearAll(){ Object.keys(localStorage).forEach(k=>{ if(k.startsWith(STORE_PREFIX)) localStorage.removeItem(k); }); updateUI(); log('Local storage cleared'); }
+
+  // state
+  let state = load('gameState', null);
+  if(!state){
+    state = {
+      id: 'G'+Date.now(),
+      players: [], // {id,name,coins,hand:[],status,folded,stackAtStart,currentBet}
+      deck: secureShuffle(createDeck()),
+      pointer: 0,
+      pot: 0,
+      entryFee: 20,
+      currentTurnIndex: 0,
+      lastActionId: 0,
+      log: []
+    };
+    save('gameState', state);
+  }
+
+  // quick UI refs
+  const el = id=>document.getElementById(id);
+  const logEl = el('log');
+
+  function persist(){
+    save('gameState', state);
+    updateUI();
+  }
+  function log(msg){
+    state.log.push({t:Date.now(), m:msg});
+    save('gameState', state);
+    renderLog();
+  }
+  function renderLog(){
+    const parts = state.log.slice(-200).map(it=>`<div class="small">${(new Date(it.t)).toLocaleTimeString()} — ${it.m}</div>`);
+    logEl.innerHTML = parts.join('');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function updateUI(){
+    el('gameId').innerText = state.id;
+    el('playerCount').innerText = state.players.length;
+    el('entryFee').innerText = '₹' + state.entryFee;
+    el('pot').innerText = '₹' + state.pot;
+    el('deckLeft').innerText = Math.max(0, state.deck.length - state.pointer);
+    el('pointer').innerText = state.pointer;
+    const wallet = load('between:wallet', 500);
+    el('wallet').innerText = '₹' + wallet;
+
+    // players area
+    const pa = el('playersArea');
+    pa.innerHTML = '';
+    state.players.forEach((p, idx)=>{
+      const pdiv = document.createElement('div');
+      pdiv.className = 'seat';
+      pdiv.innerHTML = `<div class="info">
+          <div style="font-weight:700">${p.name} ${p.id===currentUserId() ? '(you)' : ''}</div>
+          <div class="small">Coins: ₹${p.coins} | Bet: ₹${p.currentBet||0} | ${p.status||'waiting'}</div>
+        </div>
+        <div>${p.hand && p.hand.length ? p.hand.map(c=>cardHTML(c)).join('') : '<div class="small">No cards</div>'}</div>`;
+      pa.appendChild(pdiv);
+    });
+
+    // active player select
+    const sel = el('activePlayerSelect');
+    sel.innerHTML = '';
+    state.players.forEach((p, idx)=>{
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.text = `${p.name} (₹${p.coins}) ${p.folded?'- folded':''}`;
+      sel.appendChild(opt);
+    });
+    sel.value = state.currentTurnIndex || 0;
+    el('currentTurn').innerText = state.players[state.currentTurnIndex] ? state.players[state.currentTurnIndex].name : '-';
+    el('deckView').innerText = '🂠';
+    const nextCardText = state.deck[state.pointer] || 'none';
+    el('nextCard').innerText = nextCardText;
+    renderLog();
+  }
+
+  // simple identification for local pass-and-play (every seat is a "user" on same device)
+  function currentUserId(){
+    // one user on the device: "localUser"
+    return load('localUserId', 'localUser');
+  }
+
+  // UI events
+  el('newGameBtn').addEventListener('click', ()=>{
+    state = {
+      id: 'G'+Date.now(),
+      players: [],
+      deck: secureShuffle(createDeck()),
+      pointer: 0,
+      pot: 0,
+      entryFee: Number(el('entryInput').value) || 20,
+      currentTurnIndex: 0,
+      log: []
+    };
+    save('gameState', state);
+    log('New game created: ' + state.id);
+    persist();
+  });
+
+  el('resetStorageBtn').addEventListener('click', ()=>{
+    if(confirm('Reset local game storage?')){ clearAll(); location.reload(); }
+  });
+
+  el('createBtn').addEventListener('click', ()=>{
+    const count = Number(el('playersInput').value) || 2;
+    const fee = Number(el('entryInput').value) || 20;
+    state.players = [];
+    // each player is a seat; for pass-and-play we create local players
+    for(let i=1;i<=count;i++){
+      state.players.push({
+        id: 'P'+i,
+        name: 'Player'+i,
+        coins: 500,
+        hand: [],
+        status: 'waiting',
+        folded: false,
+        currentBet: 0
+      });
+    }
+    state.entryFee = fee;
+    state.pot = 0;
+    // deduct entry from each player's coins and add to pot
+    state.players.forEach(p => { p.coins -= fee; state.pot += fee; });
+    log(`Table created with ${count} players; entry ₹${fee}; pot ₹${state.pot}`);
+    persist();
+  });
+
+  el('dealBtn').addEventListener('click', ()=>{
+    // deal 2 cards to each player in order
+    if(state.players.length < 2){ alert('Create a table first'); return; }
+    for(const p of state.players){ p.hand = []; p.folded=false; p.status='active'; p.currentBet=0; }
+    for(let r=0;r<2;r++){
+      for(const p of state.players){
+        if(state.pointer >= state.deck.length) {
+          // reshuffle remaining cards (rare)
+          state.deck = secureShuffle(createDeck());
+          state.pointer = 0;
+          log('Deck exhausted — reshuffled full deck');
+        }
+        p.hand.push(state.deck[state.pointer++]);
+      }
+    }
+    state.currentTurnIndex = 0;
+    log('Dealt 2 cards to each player. Pointer: ' + state.pointer);
+    persist();
+  });
+
+  el('nextTurnBtn').addEventListener('click', ()=>{
+    if(state.players.length===0) return;
+    let idx = (state.currentTurnIndex +1) % state.players.length;
+    state.currentTurnIndex = idx;
+    log('Turn moved to ' + state.players[idx].name);
+    persist();
+  });
+
+  el('foldBtn').addEventListener('click', ()=>{
+    const idx = Number(el('activePlayerSelect').value);
+    const p = state.players[idx];
+    if(!p || p.folded) return;
+    p.folded = true; p.status='folded';
+    log(`${p.name} folded`);
+    persist();
+  });
+
+  el('callBtn').addEventListener('click', ()=>{
+    // in this simple one-round model, call means match highest currentBet
+    const idx = Number(el('activePlayerSelect').value);
+    const p = state.players[idx];
+    if(!p) return;
+    const highest = Math.max(...state.players.map(x=>x.currentBet||0));
+    const diff = highest - (p.currentBet||0);
+    if(diff <= 0){ log(`${p.name} has already matched`); return; }
+    if(p.coins < diff){ alert('Not enough coins to call'); return; }
+    p.coins -= diff; p.currentBet = (p.currentBet||0) + diff; state.pot += diff;
+    log(`${p.name} called and added ₹${diff} to pot`);
+    persist();
+  });
+
+  el('raiseBtn').addEventListener('click', ()=>{
+    const idx = Number(el('activePlayerSelect').value);
+    const p = state.players[idx];
+    if(!p) return;
+    const raise = Number(el('raiseAmount').value) || 0;
+    if(raise <= 0){ alert('Enter raise amount'); return; }
+    const highest = Math.max(...state.players.map(x=>x.currentBet||0));
+    const need = (highest - (p.currentBet||0)) + raise;
+    if(p.coins < need){ alert('Not enough coins to raise'); return; }
+    p.coins -= need;
+    p.currentBet = (p.currentBet||0) + need;
+    state.pot += need;
+    log(`${p.name} raised by ₹${raise} (put ₹${need} into pot). Pot ₹${state.pot}`);
+    persist();
+  });
+
+  // In-Between side bet logic
+  el('activePlayerSelect').addEventListener('change', ()=>{
+    showBetweenInfo();
+  });
+
+  function computeBetweenOddsForPlayer(p){
+    if(!p || !p.hand || p.hand.length<2) return null;
+    const r1 = rankValue(p.hand[0]);
+    const r2 = rankValue(p.hand[1]);
+    const low = Math.min(r1,r2), high = Math.max(r1,r2);
+    const gapRanks = Math.max(0, high - low - 1);
+    if(gapRanks === 0) return {winningCards:0, remaining: state.deck.length - state.pointer, prob:0, fairPayout: null};
+    // count actual winning cards in deck slice after pointer
+    const slice = state.deck.slice(state.pointer);
+    let winning = 0;
+    for(const c of slice){
+      const rv = rankValue(c);
+      if(rv > low && rv < high) winning++;
+    }
+    const remaining = slice.length;
+    const prob = remaining === 0 ? 0 : winning / remaining;
+    const fairPayout = winning === 0 ? null : (remaining / winning);
+    return { winningCards: winning, remaining, prob, fairPayout, low, high, gapRanks };
+  }
+
+  function showBetweenInfo(){
+    const idx = Number(el('activePlayerSelect').value);
+    const p = state.players[idx];
+    const info = computeBetweenOddsForPlayer(p);
+    const out = el('betweenInfo');
+    if(!p || !p.hand || p.hand.length<2){ out.innerHTML = '<span class="small">Deal first to see in-between odds</span>'; return; }
+    if(info.winningCards===0){ out.innerHTML = `<div class="small">Cards: ${p.hand.join(', ')} — gap 0 (pair or adjacent). In-between auto loses by default.</div>`; return; }
+    const fair = info.fairPayout ? info.fairPayout.toFixed(2) + '×' : '-';
+    out.innerHTML = `<div class="small">Cards: ${p.hand.join(', ')} — ranks between (${info.low+1}..${info.high-1}) = ${info.gapRanks} ranks → ${info.winningCards} winning cards / ${info.remaining} remaining (prob ${(info.prob*100).toFixed(2)}%). Fair payout ~ ${fair}</div>`;
+  }
+
+  el('placeBetween').addEventListener('click', ()=>{
+    const idx = Number(el('activePlayerSelect').value);
+    const p = state.players[idx];
+    const stake = Number(el('sideStake').value) || 0;
+    if(!p || p.hand.length<2){ alert('Deal first'); return; }
+    if(stake <= 0) { alert('Enter stake'); return; }
+    if(p.coins < stake){ alert('Not enough coins'); return; }
+    const info = computeBetweenOddsForPlayer(p);
+    // show suggested payout (we use floor of fairPayout - small house edge)
+    if(info.winningCards === 0){
+      // auto lose by default
+      p.coins -= stake; state.pot += stake;
+      log(`${p.name} placed ₹${stake} in-between and lost (no ranks between)`);
+      persist();
+      return;
+    }
+    // compute payout multiplier with small house-edge (pay Math.floor(fair*100)/100 - 0.05)
+    let fair = info.fairPayout;
+    // if fair is null or Infinity, treat as 0
+    if(!finite(fair)) fair = 0;
+    const houseEdge = 0.05; // 5% house edge
+    const payMul = Math.max(0, Math.floor((fair - houseEdge)*100)/100);
+    // but ensure at least 1x
+    const payoutMultiplier = payMul >= 0.5 ? payMul : Math.max(1, (info.remaining / info.winningCards) - houseEdge);
+    // show modal confirm:
+    if(!confirm(`${p.name}, In-Between stake ₹${stake}\nWin prob ${(info.prob*100).toFixed(2)}%\nPayout multiplier (approx): ${payoutMultiplier.toFixed(2)}×\nProceed?`)) return;
+    // Reserve stake
+    p.coins -= stake;
+    // Draw top card (one draw per bet to keep bets independent)
+    if(state.pointer >= state.deck.length){
+      state.deck = secureShuffle(createDeck()); state.pointer = 0; log('Deck exhausted — reshuffled full deck');
+    }
+    const draw = state.deck[state.pointer++];
+    const isWin = (rankValue(draw) > info.low) && (rankValue(draw) < info.high);
+    if(isWin){
+      // payout to player (stake * payoutMultiplier)
+      const payout = Math.floor(stake * payoutMultiplier);
+      p.coins += payout;
+      log(`${p.name} placed ₹${stake} in-between; drew ${draw} — WIN (payout ₹${payout})`);
+    } else {
+      state.pot += stake;
+      log(`${p.name} placed ₹${stake} in-between; drew ${draw} — LOSE (stake added to pot)`);
+    }
+    persist();
+  });
+
+  function finite(x){ return Number.isFinite(x) && !Number.isNaN(x); }
+
+  el('revealBtn').addEventListener('click', ()=>{
+    // find active, non-folded players and determine winner by two-card rule:
+    const contenders = state.players.filter(p=>!p.folded);
+    if(contenders.length===0){ alert('No active players'); return; }
+    // ranking: pair > high card (compare top then second). We'll sort by [isPair?1:0, highest, second]
+    const ranksFor = (p)=>{
+      const a = rankValue(p.hand[0]), b = rankValue(p.hand[1]);
+      const highest = Math.max(a,b), second = Math.min(a,b);
+      const isPair = (a===b) ? 1 : 0;
+      return {isPair, highest, second};
+    };
+    let best = null;
+    for(const p of contenders){
+      const r = ranksFor(p);
+      if(!best) { best = {p, r}; continue; }
+      // compare
+      if(r.isPair && !best.r.isPair){ best = {p,r}; continue; }
+      if(r.isPair && best.r.isPair){
+        if(r.highest > best.r.highest) best = {p,r};
+        else if(r.highest === best.r.highest){
+          // tie -> split pot later
+        }
+      } else if(!r.isPair && !best.r.isPair){
+        if(r.highest > best.r.highest) best = {p,r};
+        else if(r.highest === best.r.highest){
+          if(r.second > best.r.second) best = {p,r};
+        }
+      }
+    }
+    // determine ties
+    const winners = contenders.filter(p=>{
+      const rr = ranksFor(p);
+      if(best.r.isPair !== rr.isPair) return false;
+      if(rr.highest !== best.r.highest) return false;
+      if(!rr.isPair && rr.second !== best.r.second) return false;
+      return true;
+    });
+    const split = Math.floor(state.pot / winners.length);
+    winners.forEach(w=>{ w.coins += split; });
+    log(`Showdown: winners = ${winners.map(x=>x.name).join(', ')}. Each gets ₹${split} from pot.`);
+    state.pot = 0;
+    persist();
+  });
+
+  // load wallet helper
+  if(load('between:wallet') === null) save('between:wallet', 500);
+
+  // initial UI
+  updateUI();
+  renderLog();
+  showBetweenInfo();
+
+  // expose for debugging
+  window._betweenState = state;
+})();
+</script>
+</body>
+</html>
